@@ -7,4 +7,4 @@ edition = "2018"
 
 [dependencies]
 sha2 = "0.9.5"
-hex-literal = "0.3.3"
+num-bigint = "0.4.0"

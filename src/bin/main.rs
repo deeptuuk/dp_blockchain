@@ -7,4 +7,7 @@ fn main() {
     blockchain.add_block(String::from("Send 2 more BTC to Ivan"));
 
     blockchain.show_blockchain();
+
+    // let x: &[u8] =&[1,2,3];
+    // println!("{:?}", x);
 }

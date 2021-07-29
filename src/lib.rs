@@ -27,6 +27,7 @@ struct Block {
 impl Block {
     pub fn new_block(data: String, prev_block_hash: BigUint) -> Block {
 
+
         let mut temp = Block {
             timestamp: SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap(),
             data: data,
@@ -36,11 +37,39 @@ impl Block {
         };
         
         temp.proof_of_work();
-        //temp.set_hash();
+        while !temp.validate_work() {
+            temp.timestamp = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap();
+            temp.proof_of_work();
+        }
         temp
     }
 
+    fn validate_work(&mut self) -> bool {
+        let mut target_big = BigUint::new(Vec::new());
+        target_big.set_bit(256 - TARGET_BITS, true);
 
+        let mut hasher = Sha256::new();
+        hasher.update(
+            [
+                self.timestamp.as_nanos().to_string().as_bytes(),
+                self.data.as_bytes(),
+                &self.prev_block_hash.to_bytes_le()[..],
+                &TARGET_BITS.to_le_bytes(),
+                &self.nonce.to_le_bytes(),
+            ].concat()
+        );
+        let result = hasher.finalize();
+
+        let temp = BigUint::from_bytes_le(result.as_slice());
+
+        if temp < target_big {
+            return true;
+        }
+        else {
+            return false;
+        }
+
+    }
     // fn set_hash(&mut self) {
     //     let mut hasher = Sha256::new();
     //     hasher.update( [self.timestamp.as_nanos().to_string().as_bytes(), self.data.as_bytes(), &self.prev_block_hash ].concat() );

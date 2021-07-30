@@ -1,7 +1,11 @@
-use sha2::{Sha256, Digest};
-use std::convert::TryInto;
-use std::time::{SystemTime, Duration};
 use num_bigint::BigUint;
+use sha2::{Digest, Sha256};
+use std::time::{Duration, SystemTime};
+
+use serde::{Deserialize, Serialize};
+use serde_json::Result;
+
+use nut::DBBuilder;
 
 #[cfg(test)]
 mod tests {
@@ -13,7 +17,7 @@ mod tests {
 
 const TARGET_BITS: u64 = 16;
 
-#[derive(Debug)]
+#[derive(Serialize, Deserialize, Debug)]
 struct Block {
     timestamp: Duration,
     data: String,
@@ -26,19 +30,22 @@ struct Block {
 
 impl Block {
     pub fn new_block(data: String, prev_block_hash: BigUint) -> Block {
-
-
         let mut temp = Block {
-            timestamp: SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap(),
+            timestamp: SystemTime::now()
+                .duration_since(SystemTime::UNIX_EPOCH)
+                .unwrap(),
             data: data,
             prev_block_hash: prev_block_hash,
             hash: BigUint::new(Vec::new()),
             nonce: 0,
         };
-        
+
         temp.proof_of_work();
         while !temp.validate_work() {
-            temp.timestamp = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap();
+            temp.timestamp = SystemTime::now()
+                .duration_since(SystemTime::UNIX_EPOCH)
+                .unwrap();
+            temp.nonce = 0;
             temp.proof_of_work();
         }
         temp
@@ -56,7 +63,8 @@ impl Block {
                 &self.prev_block_hash.to_bytes_le()[..],
                 &TARGET_BITS.to_le_bytes(),
                 &self.nonce.to_le_bytes(),
-            ].concat()
+            ]
+            .concat(),
         );
         let result = hasher.finalize();
 
@@ -64,11 +72,9 @@ impl Block {
 
         if temp < target_big {
             return true;
-        }
-        else {
+        } else {
             return false;
         }
-
     }
     // fn set_hash(&mut self) {
     //     let mut hasher = Sha256::new();
@@ -94,7 +100,8 @@ impl Block {
                     &self.prev_block_hash.to_bytes_le()[..],
                     &TARGET_BITS.to_le_bytes(),
                     &self.nonce.to_le_bytes(),
-                ].concat()
+                ]
+                .concat(),
             );
 
             result = hasher.finalize_reset();
@@ -105,31 +112,59 @@ impl Block {
 
             if self.hash < target_big {
                 break;
-            }
-            else {
+            } else {
                 self.nonce = self.nonce + 1;
             }
         }
+    }
+
+    pub fn serialize(&self) -> Vec<u8> {
+        serde_json::to_vec(&self).unwrap()
+    }
+
+    pub fn deserialize(block: &mut Vec<u8>) -> Block {
+        let temp: Block = serde_json::from_slice(block).unwrap();
+        temp
     }
 }
 
 #[derive(Debug)]
 pub struct BlockChain {
-    blocks: Vec<Block>
+    blocks: Vec<Block>,
 }
 
 impl BlockChain {
     pub fn new_blockchain() -> BlockChain {
-        let genesis_block = Block::new_block(String::from("Genesis Block"), BigUint::new(vec![0u32; 8]));
-        let mut blockchain =  BlockChain {
-            blocks: Vec::new(),
-        };
+
+        // let tip: &[u8];
+
+        // let mut db = DBBuilder::new("test.db").build().unwrap();
+        // let mut tx = db.begin_rw_tx().unwrap();
+
+        // match tx.bucket(b"blocksBucket") {
+        //     Ok(blocks) => {
+        //         tip = blocks.get(b"l").unwrap();
+        //     },
+        //     Err(_)   => {
+
+        //     },
+        // }
+
+        let genesis_block =
+            Block::new_block(String::from("Genesis Block"), BigUint::new(vec![0u32; 8]));
+        let mut blockchain = BlockChain { blocks: Vec::new() };
         blockchain.blocks.push(genesis_block);
         blockchain
     }
     pub fn add_block(&mut self, data: String) {
-        
-        self.blocks.push(Block::new_block(data, self.blocks[self.blocks.len() - 1].hash.clone()));
+        // let temp = Block::new_block(data, self.blocks[self.blocks.len() - 1].hash.clone());
+        // let j = serde_json::to_string(&temp).unwrap();
+        // println!("{}", j);
+        //self.blocks.push(temp);
+        self.blocks.push(Block::new_block(
+            data,
+            self.blocks[self.blocks.len() - 1].hash.clone(),
+        ))
     }
 
     pub fn show_blockchain(&self) {

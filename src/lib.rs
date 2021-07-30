@@ -15,7 +15,7 @@ mod tests {
     }
 }
 
-const TARGET_BITS: u64 = 16;
+const TARGET_BITS: u64 = 20;
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Block {
@@ -258,10 +258,10 @@ pub struct BlockchainIterator {
 }
 
 impl BlockchainIterator {
-    pub fn new(temp: BlockChainDb) -> BlockchainIterator {
+    pub fn new(temp: &BlockChainDb) -> BlockchainIterator {
         BlockchainIterator {
-            tip: temp.tip,
-            db: temp.db,
+            tip: temp.tip.clone(),
+            db: temp.db.clone(),
         }
     }
 }

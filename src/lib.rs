@@ -5,7 +5,7 @@ use std::time::{Duration, SystemTime};
 use serde::{Deserialize, Serialize};
 use serde_json::Result;
 
-use nut::DBBuilder;
+use nut::{DBBuilder, DB};
 
 #[cfg(test)]
 mod tests {
@@ -18,7 +18,7 @@ mod tests {
 const TARGET_BITS: u64 = 16;
 
 #[derive(Serialize, Deserialize, Debug)]
-struct Block {
+pub struct Block {
     timestamp: Duration,
     data: String,
     prev_block_hash: BigUint,
@@ -122,10 +122,19 @@ impl Block {
         serde_json::to_vec(&self).unwrap()
     }
 
-    pub fn deserialize(block: &mut Vec<u8>) -> Block {
+    pub fn deserialize(block: &Vec<u8>) -> Block {
         let temp: Block = serde_json::from_slice(block).unwrap();
         temp
     }
+
+    pub fn show_block(i: &Block) {
+        println!("TimeStamp: {:?}", i.timestamp);
+        println!("Prev_hash: {:064x}", i.prev_block_hash);
+        println!("Data     : {}", i.data);
+        println!("Hash     : {:064x}", i.hash);
+        println!("Nonce    : {}", i.nonce);
+        println!("");
+    }    
 }
 
 #[derive(Debug)]
@@ -135,21 +144,6 @@ pub struct BlockChain {
 
 impl BlockChain {
     pub fn new_blockchain() -> BlockChain {
-
-        // let tip: &[u8];
-
-        // let mut db = DBBuilder::new("test.db").build().unwrap();
-        // let mut tx = db.begin_rw_tx().unwrap();
-
-        // match tx.bucket(b"blocksBucket") {
-        //     Ok(blocks) => {
-        //         tip = blocks.get(b"l").unwrap();
-        //     },
-        //     Err(_)   => {
-
-        //     },
-        // }
-
         let genesis_block =
             Block::new_block(String::from("Genesis Block"), BigUint::new(vec![0u32; 8]));
         let mut blockchain = BlockChain { blocks: Vec::new() };
@@ -182,3 +176,113 @@ impl BlockChain {
 pub fn test_work() {
     println!("This is a test")
 }
+
+
+pub struct BlockChainDb {
+    tip: Vec<u8>,
+    db: nut::DB,
+}
+
+impl BlockChainDb {
+    pub fn new_blockchain() -> BlockChainDb {
+        let mut tip: Vec<u8> = Vec::new();
+
+        let mut db = DBBuilder::new("test.db").build().unwrap();
+        let mut tx = db.begin_rw_tx().unwrap();
+
+        let mut flag: u8 = 0;
+
+        {
+            match tx.bucket(b"blocksBucket") {
+                Ok(blocks) => {
+                    tip = blocks.get(b"l").unwrap().to_vec();
+                },
+                Err(_)   => {
+                    flag = 1;          
+                },
+            }
+        }
+
+        if flag == 1 {
+            let genesis_block = Block::new_block(String::from("Genesis Block"), BigUint::new(vec![0u32; 8]));
+            let mut blocks = tx.create_bucket(b"blocksBucket").unwrap();
+            blocks.put(
+                &genesis_block.hash.to_bytes_le(),
+                genesis_block.serialize()
+            ).unwrap();
+
+            blocks.put(
+                b"l",
+                genesis_block.hash.to_bytes_le()
+            ).unwrap();    
+            
+            tip = genesis_block.hash.to_bytes_le();
+        }
+
+        BlockChainDb {
+            tip: tip,
+            db: db,
+        }
+    }
+
+    pub fn add_block(&mut self, data: String) {
+        let last_hash;
+        {
+            let tx = self.db.begin_tx().unwrap();
+            let blocks = tx.bucket(b"blocksBucket").unwrap();
+            last_hash = blocks.get(b"l").unwrap().to_vec();
+        }
+
+        let new_block = Block::new_block(data, BigUint::from_bytes_le(&last_hash[..]));
+
+        let mut tx = self.db.begin_rw_tx().unwrap();
+        let mut blocks = tx.bucket_mut(b"blocksBucket").unwrap();
+
+        blocks.put(
+            &new_block.hash.to_bytes_le(),
+            new_block.serialize()
+        ).unwrap();
+
+        blocks.put(
+            b"l",
+            new_block.hash.to_bytes_le()
+        ).unwrap();    
+
+        self.tip = new_block.hash.to_bytes_le();
+    }
+}
+
+pub struct BlockchainIterator {
+    tip: Vec<u8>,
+    db: nut::DB,    
+}
+
+impl BlockchainIterator {
+    pub fn new(temp: BlockChainDb) -> BlockchainIterator {
+        BlockchainIterator {
+            tip: temp.tip,
+            db: temp.db,
+        }
+    }
+}
+
+impl Iterator for BlockchainIterator {
+    type Item = Block;
+
+    fn next(&mut self) -> Option<Self::Item> {
+
+        let tx = self.db.begin_tx().unwrap();
+
+        let blocks = tx.bucket(b"blocksBucket").unwrap();
+        if let Some(temp) = blocks.get(&self.tip[..]) {
+            let block: Block = Block::deserialize(&temp.to_vec());
+            self.tip = block.prev_block_hash.to_bytes_le();
+
+            return Some(block)
+        }
+        else {
+            return None;
+        }
+    }
+}
+

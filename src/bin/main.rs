@@ -1,4 +1,4 @@
-use dp_blockchain4::{Block, BlockChainDb, BlockchainIterator, Transaction, Pool};
+use dp_blockchain::{Block, BlockChainDb, BlockchainIterator, Transaction, Pool};
 use clap::{Arg, App, SubCommand};
 
 fn main() {
